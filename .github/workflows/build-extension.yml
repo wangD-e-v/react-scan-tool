@@ -1,0 +1,55 @@
+name: Build Extension
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/extension/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.x
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Get package info
+        id: package
+        run: |
+          echo "name=$(node -p "require('./packages/extension/package.json').name")" >> $GITHUB_OUTPUT
+          echo "version=$(node -p "require('./packages/extension/package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Build extensions
+        run: |
+          pnpm build
+          cd packages/extension
+          rm -rf build
+          pnpm pack:all
+
+      - name: Commit changes
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git checkout main
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -f packages/extension/build/*.zip
+          git diff --staged --quiet || (git commit -m "chore: update extension builds [skip ci]" && git push)
